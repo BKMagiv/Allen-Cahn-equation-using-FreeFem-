@@ -1,5 +1,64 @@
-// du - Delta u + epsilon^-2 f(u) = 0
-// Implicit Euler Method
+// du - ε^2 Δu + f(u) = 0
+// Zero Dirichlet boundary condition: u|Γ = 0;
+// Implicit Euler method
+
+// ε
+real epsilon = 0.1;
 
 // initial data 
 func phi = (abs(x - 0.5) <= 0.15) && (abs(y - 0.5) <= 0.15);
+
+//space
+int Nx = 100, Ny = 100;
+// mesh [0,1] X [0,1]
+mesh Th = square(Nx,Ny);
+// finite element space: P1 elements
+fespace Vh(Th,P1);
+
+//time
+real T = 1.0;
+int M = 1000;
+real dt = T / M;
+real[int] t(M + 1);
+
+for (int j = 0;j <= M;j++) {
+    t[j] = dt * j;
+}
+
+//solver by IM Euler method
+Vh[int] u(M + 1);
+
+u[0] = phi;
+for (int j = 1;j <= M;j++){
+    Vh w = 1.0;
+    real Err = sqrt(int2d(Th)(w^2));
+    // Newton's method
+    while (Err >= 1e-8) {
+        varf F(unused, v) = int2d(Th)(
+            (u[j] - u[j - 1]) * v + dt * epsilon^2 * (
+                dx(u[j]) * dx(v) + dy(u[j]) * dy(v)
+            ) + dt * (u[j]^3 - u[j]) * v
+        ) + on(1,2,3,4, unused = 0);
+        varf DF(du, dv) = int2d(Th)(
+            du * dv + dt * epsilon^2 * (
+                dx(du) * dx(dv) + dy(du) * dy(dv)
+            ) + dt * (3 * u[j]^2 - 1) * du * dv
+        ) + on(1,2,3,4, du = 0);
+
+        real[int] rhs = F(0, Vh); matrix J = DF(Vh, Vh, factorize = 1, solver = LU);
+        w[] = J^-1 * rhs;
+        u[j][] -= w[];
+
+        Err = sqrt(int2d(Th)(w^2));
+    }
+}
+
+// colormap
+real[int] colorhsv = [4. / 6. , 1.  , 0.5, // Dark blue
+                      4. / 6. , 1.  , 1. , // Blue
+                      5. / 6. , 1.  , 1. , // Magenta
+                      1.      , 1.  , 1. , // Red
+                      1.      , 0.5 , 1.   // Light red
+                    ];
+// plot
+plot(u[M], fill = true, boundary = false, hsv = colorhsv);
